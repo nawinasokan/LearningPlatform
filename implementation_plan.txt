@@ -1,0 +1,268 @@
+
+
+
+Implementation Plan
+Interview Academy — Master Implementation Plan
+Goal
+Build Interview Academy, a personalized technical learning and interview preparation platform for Nawin Asokan, a Python Backend Developer with 2+ years of experience at Mahima Technology Pvt Ltd. All content is predefined, stored in PostgreSQL, and curated around Nawin's actual resume profile.
+
+Environment Confirmed
+Tool	Version
+Python	3.12.3
+Node.js	v24.22.0
+npm	11.19.1
+Docker	29.9.1
+Docker Compose	v5.6.0
+Project Root Layout
+
+/media/nawin/New Volume/Projects/LearningPlatform/
+├── backend/
+├── frontend/
+├── nginx/
+├── docs/
+├── docker-compose.yml
+├── .env.example
+└── README.md
+Proposed Changes
+PHASE 1 — Foundation & Infrastructure
+[NEW] docker-compose.yml
+Full-stack orchestration: PostgreSQL, Redis, Backend (FastAPI + Uvicorn), Celery worker, Frontend (served via Nginx), Nginx reverse proxy.
+
+[NEW] backend/
+FastAPI modular monolith:
+
+
+backend/
+  app/
+    main.py              # FastAPI app entry
+    core/
+      config.py          # Pydantic settings / env vars
+      security.py        # JWT, Argon2
+      database.py        # SQLAlchemy async engine + session
+      logging.py         # Structured logging
+    models/              # SQLAlchemy ORM models (all 25 tables)
+    schemas/             # Pydantic v2 request/response schemas
+    api/v1/              # FastAPI routers
+      auth.py
+      resumes.py
+      subjects.py
+      topics.py
+      questions.py
+      coding.py
+      sql_lab.py
+      projects.py
+      analytics.py
+      revision.py
+      bookmarks.py
+      diagrams.py
+    services/
+      resume_parser.py   # Deterministic PDF/DOCX extraction
+      content_service.py
+      progress_service.py
+      recommendation_service.py
+      revision_service.py   # Spaced repetition (SM-2 algorithm)
+      coding_service.py     # Sandboxed code execution via subprocess
+      sql_service.py        # Read-only sandbox DB execution
+      diagram_service.py
+    repositories/        # DB query layer (per entity)
+    workers/
+      celery_app.py
+      tasks.py           # Background: progress recalc, revision scheduling
+    utils/
+  migrations/            # Alembic migrations
+  tests/
+  requirements.txt
+  Dockerfile
+  alembic.ini
+[NEW] frontend/
+React + Vite + Bootstrap 5:
+
+
+frontend/
+  src/
+    app/
+      App.jsx
+      router.jsx
+    components/
+      common/           # Button, Card, Badge, Spinner, EmptyState, ErrorBoundary
+      layout/           # Sidebar, Topbar, Layout
+      charts/           # Recharts wrappers
+      diagrams/         # Mermaid viewer
+      editor/           # Monaco Editor wrapper
+      question/         # QuestionCard, AnswerPanel, ExplanationTabs
+    pages/
+      auth/             # Login, Register
+      dashboard/        # Dashboard
+      resume/           # ResumeUpload, ResumeEditor, SkillMap
+      python/           # SubjectPage (reused across all subjects)
+      django/
+      fastapi/
+      flask/
+      sql/
+      backend/
+      devops/
+      coding/           # CodingLab
+      sql_lab/          # SQL Lab
+      projects/         # ProjectDeepDive
+      analytics/        # ProgressAnalytics
+      revision/         # DailyRevision
+      bookmarks/
+      settings/
+    services/
+      api.js            # Axios instance + interceptors
+      auth.js
+      content.js
+      coding.js
+    hooks/
+      useAuth.js
+      useProgress.js
+      usePagination.js
+    context/
+      AuthContext.jsx
+      ThemeContext.jsx
+    styles/
+      index.css         # Design system tokens
+      components.css
+    assets/
+  index.html
+  vite.config.js
+  package.json
+  Dockerfile
+Database Schema (25 tables)
+Table	Purpose
+users	Authentication + profile
+resumes	Uploaded resume metadata
+resume_skills	Parsed skill entities
+resume_projects	Parsed project entries
+resume_facts	Parsed key achievements
+subjects	Top-level subject (Python, Django…)
+topics	Topics under a subject
+subtopics	Subtopics under a topic
+topic_prerequisites	DAG of learning prerequisites
+learning_content	Rich concept content (JSONB)
+questions	Interview questions
+question_answers	Answers per explanation mode
+question_tags	Tag definitions
+question_tag_mappings	M2M question ↔ tag
+diagrams	Mermaid diagram definitions
+coding_problems	Monaco lab problems
+coding_test_cases	Test cases per problem
+coding_submissions	User submission history
+sql_problems	SQL lab exercises
+learning_progress	Per-user topic progress
+user_answers	User question answers
+question_bookmarks	Bookmarked questions
+daily_plans	Auto-generated daily study plan
+flashcards	Quick revision cards
+revision_schedules	SM-2 spaced repetition schedule
+learning_activities	Time-series activity log
+content_categories	Category taxonomy
+API Endpoints
+All prefixed with /api/v1/
+
+Method	Path	Description
+POST	/auth/register	Register user
+POST	/auth/login	Login, return JWT
+GET	/auth/me	Current user
+POST	/auth/refresh	Refresh token
+POST	/resumes/upload	Upload PDF/DOCX
+GET	/resumes/latest	Latest resume
+GET	/resumes/{id}	Resume detail
+PATCH	/resumes/{id}	Edit resume
+GET	/resumes/{id}/facts	Resume facts
+PATCH	/resumes/{id}/facts/{fact_id}	Edit fact
+GET	/subjects	All subjects
+GET	/subjects/{id}/topics	Topics in subject
+GET	/topics/{id}	Topic detail + content
+GET	/topics/{id}/questions	Questions for topic
+GET	/questions	Paginated questions
+GET	/questions/{id}	Question detail
+GET	/questions/{id}/answers	Answers by mode
+POST	/questions/{id}/complete	Mark complete
+GET	/coding/problems	Coding problems list
+POST	/coding/run	Run code (sandboxed)
+POST	/coding/submit	Submit solution
+GET	/coding/submissions	User submissions
+GET	/sql/problems	SQL problems list
+POST	/sql/execute	Execute SQL (sandbox DB)
+GET	/projects	Resume projects
+GET	/projects/{id}	Project detail
+GET	/projects/{id}/questions	Project questions
+GET	/analytics/dashboard	Dashboard metrics
+GET	/analytics/subjects	Per-subject progress
+GET	/analytics/weak-topics	Weak/due topics
+GET	/analytics/history	Activity history
+GET	/revision/today	Today's revision items
+POST	/revision/{id}/complete	Mark revised
+GET	/bookmarks	User bookmarks
+POST	/bookmarks	Add bookmark
+DELETE	/bookmarks/{id}	Remove bookmark
+GET	/diagrams	All diagrams
+GET	/diagrams/{id}	Single diagram
+Seed Content Targets
+Subject	Questions
+Python	150
+Django	100
+FastAPI	100
+Flask	50
+SQL/PostgreSQL	150
+Database Engineering	50
+Backend Engineering	50
+Celery & Redis	40
+Docker & Linux	40
+AWS & GCP	40
+JavaScript & React	40
+System Design	50
+Python Coding Problems	50
+SQL Practice Problems	40
+Project Deep Dive Questions	~60
+Implementation Phases
+Phase	Focus	Key Deliverables
+1	Foundation	Docker Compose, DB, Migrations, Auth, Dashboard skeleton
+2	Resume Management	Upload, extraction, editing, skill mapping
+3	Core Learning	Python/Django/FastAPI/Flask subject pages, Question bank
+4	Database Engineering	SQL/PostgreSQL, MySQL, MongoDB, SQLite modules
+5	Backend Engineering	REST APIs, Auth, Celery/Redis learning module
+6	Coding Lab	Monaco editor, sandboxed Python execution, test runner
+7	Visual Learning	Mermaid diagrams, 17+ diagrams seeded
+8	Project Deep Dive	3 resume projects with detailed learning sections
+9	DevOps	Docker, Linux, AWS, GCP modules
+10	Analytics & Revision	Spaced repetition, weak topics, daily plan
+11	Production	Tests, Nginx, full Docker Compose, README
+Open Questions
+IMPORTANT
+
+PostgreSQL credentials — What PostgreSQL username/password/database name should be used? Defaults will be:
+
+User: interview_user
+Password: interview_pass
+DB: interview_academy Let me know if you want different values.
+IMPORTANT
+
+Code Execution Sandbox — Python code from the Coding Lab will run in an isolated subprocess with strict timeouts and resource limits (no Docker-in-Docker). This is safe for a local dev environment. For production, a separate Docker container or Pyodide (browser-side WASM) would be more secure. Which approach do you prefer?
+
+Option A: Subprocess with resource limits (simpler, works immediately)
+Option B: Pyodide (runs Python in browser, zero server risk)
+NOTE
+
+SQL Sandbox — SQL exercises will run against a separate read-only PostgreSQL schema (sandbox) pre-loaded with sample datasets (employees, orders, banking). This is isolated from the main application database.
+
+NOTE
+
+Seed content — All 860+ questions and explanations will be written as Python seed data files and inserted via Alembic seed migration. Content will be curated and accurate — this is the most time-intensive part of the project.
+
+Verification Plan
+Automated Tests
+bash
+
+cd backend && pytest tests/ -v --tb=short
+Manual Verification
+Auth: register → login → JWT → protected routes
+Resume: upload PDF → extraction → edit facts → skill map
+Learning: navigate subject → topic → read content → answer question → see progress update
+Coding: open problem → write solution → run → submit → see results
+SQL Lab: open problem → write SQL → execute against sandbox → see results
+Diagrams: open visual learning → view Mermaid diagram → zoom → export SVG
+Projects: navigate Project Deep Dive → F1 Audit project → read all 6 learning sections
+Analytics: dashboard shows real DB values → weak topics → revision schedule
+Docker: docker compose up → all services healthy
