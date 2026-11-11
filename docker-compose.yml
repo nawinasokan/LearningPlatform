@@ -4,14 +4,14 @@ services:
     container_name: interview_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-interview_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-interview_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-interview_academy}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/scripts/init_sandbox.sql:/docker-entrypoint-initdb.d/01_sandbox.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-interview_user} -d ${POSTGRES_DB:-interview_academy}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?Set POSTGRES_USER in .env} -d ${POSTGRES_DB:?Set POSTGRES_DB in .env}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,9 +34,9 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-interview_user}:${POSTGRES_PASSWORD:-interview_pass}@postgres:5432/${POSTGRES_DB:-interview_academy}
-      - SYNC_DATABASE_URL=postgresql://${POSTGRES_USER:-interview_user}:${POSTGRES_PASSWORD:-interview_pass}@postgres:5432/${POSTGRES_DB:-interview_academy}
-      - SANDBOX_DATABASE_URL=postgresql://${POSTGRES_USER:-interview_user}:${POSTGRES_PASSWORD:-interview_pass}@postgres:5432/interview_sandbox
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      - SYNC_DATABASE_URL=postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      - SANDBOX_DATABASE_URL=postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/interview_sandbox
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - uploads_data:/app/uploads
@@ -60,8 +60,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-interview_user}:${POSTGRES_PASSWORD:-interview_pass}@postgres:5432/${POSTGRES_DB:-interview_academy}
-      - SYNC_DATABASE_URL=postgresql://${POSTGRES_USER:-interview_user}:${POSTGRES_PASSWORD:-interview_pass}@postgres:5432/${POSTGRES_DB:-interview_academy}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      - SYNC_DATABASE_URL=postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - uploads_data:/app/uploads

@@ -92,8 +92,8 @@ INSERT INTO sandbox.departments (name, location, budget) VALUES
 
 -- ─── Seed Employees ────────────────────────────────────────────────
 INSERT INTO sandbox.employees (first_name, last_name, email, department_id, salary, hire_date, job_title, manager_id) VALUES
-('Nawin', 'Asokan', 'nawin@example.com', 1, 85000, '2024-08-01', 'Software Developer', NULL),
-('Priya', 'Sharma', 'priya@example.com', 1, 95000, '2022-03-15', 'Senior Developer', NULL),
+('Alex', 'Morgan', 'alex@example.test', 1, 85000, '2024-08-01', 'Software Developer', NULL),
+('Jordan', 'Lee', 'jordan@example.test', 1, 95000, '2022-03-15', 'Senior Developer', NULL),
 ('Arjun', 'Kumar', 'arjun@example.com', 2, 90000, '2023-01-10', 'Product Manager', NULL),
 ('Divya', 'Nair', 'divya@example.com', 1, 75000, '2024-01-20', 'Backend Developer', 2),
 ('Rahul', 'Singh', 'rahul@example.com', 3, 70000, '2023-06-01', 'Marketing Analyst', NULL),
@@ -146,21 +146,5 @@ INSERT INTO sandbox.order_items (order_id, product_id, quantity, unit_price) VAL
 (7, 5, 1, 1499.00),
 (8, 6, 1, 3999.00);
 
--- ─── Seed Accounts ─────────────────────────────────────────────────
-INSERT INTO sandbox.accounts (customer_name, account_type, balance) VALUES
-('Nawin Asokan', 'savings', 125000.00),
-('Priya Sharma', 'checking', 45000.00),
-('Arjun Kumar', 'savings', 280000.00),
-('Divya Nair', 'checking', 32000.00),
-('Rahul Singh', 'savings', 95000.00);
-
-INSERT INTO sandbox.transactions (account_id, transaction_type, amount, description, transaction_date) VALUES
-(1, 'credit', 85000.00, 'Salary - August 2024', '2024-08-31'),
-(1, 'debit', 15000.00, 'Rent payment', '2024-09-01'),
-(1, 'credit', 85000.00, 'Salary - September 2024', '2024-09-30'),
-(2, 'credit', 95000.00, 'Salary', '2024-09-30'),
-(2, 'debit', 25000.00, 'Shopping', '2024-10-05'),
-(3, 'credit', 90000.00, 'Salary', '2024-09-30'),
-(3, 'credit', 50000.00, 'Freelance payment', '2024-10-10'),
-(4, 'credit', 75000.00, 'Salary', '2024-09-30'),
-(4, 'debit', 10000.00, 'Utilities', '2024-10-02');
+-- Banking tables are intentionally empty in the public seed. Add local-only
+-- sample rows when practicing transaction queries.
