@@ -83,6 +83,32 @@ class ResumeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ResumeSkillInput(BaseModel):
+    skill_name: str = Field(min_length=1, max_length=100)
+    category: Optional[str] = Field(default=None, max_length=100)
+    proficiency: Optional[str] = Field(default=None, max_length=50)
+    subject_slug: Optional[str] = Field(default=None, max_length=100)
+
+
+class ResumeProjectInput(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: Optional[str] = None
+    technologies: Optional[Dict[str, Any]] = None
+    achievements: Optional[Dict[str, Any]] = None
+    subject_slug: Optional[str] = Field(default=None, max_length=100)
+
+
+class NewFactInput(BaseModel):
+    category: str = Field(min_length=1, max_length=100)
+    fact_text: str = Field(min_length=1, max_length=2000)
+
+
+class ResumeUpdateRequest(BaseModel):
+    skills: Optional[List[ResumeSkillInput]] = None
+    projects: Optional[List[ResumeProjectInput]] = None
+    new_facts: Optional[List[NewFactInput]] = None
+
+
 class FactUpdateRequest(BaseModel):
     fact_text: Optional[str] = None
     is_verified: Optional[bool] = None

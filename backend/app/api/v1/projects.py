@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,14 @@ from app.core.deps import get_current_user
 from app.models.models import Subject, Topic, User
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+def _project_filter(project_id: str):
+    """Projects are addressable by the UUID returned from the list, or by slug."""
+    try:
+        return Topic.id == uuid.UUID(project_id)
+    except ValueError:
+        return Topic.slug == project_id
 
 
 @router.get("")
@@ -22,7 +32,7 @@ async def list_projects(db: AsyncSession = Depends(get_db), current_user: User =
 @router.get("/{project_id}")
 async def get_project(project_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(
-        select(Topic).join(Subject).where(Subject.slug == "project-deep-dive", Topic.slug == project_id)
+        select(Topic).join(Subject).where(Subject.slug == "project-deep-dive", _project_filter(project_id))
     )
     topic = result.scalar_one_or_none()
     if not topic:
@@ -33,7 +43,7 @@ async def get_project(project_id: str, db: AsyncSession = Depends(get_db), curre
 
 @router.get("/{project_id}/questions")
 async def project_questions(project_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    result = await db.execute(select(Topic).options(selectinload(Topic.questions)).join(Subject).where(Subject.slug == "project-deep-dive", Topic.slug == project_id))
+    result = await db.execute(select(Topic).options(selectinload(Topic.questions)).join(Subject).where(Subject.slug == "project-deep-dive", _project_filter(project_id)))
     topic = result.scalar_one_or_none()
     if not topic:
         raise HTTPException(status_code=404, detail="Project not found")

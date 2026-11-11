@@ -186,3 +186,18 @@ async def get_submissions(
         "total": total, "page": page, "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
     }
+
+
+@router.get("/problems/{problem_id}/solution")
+async def coding_solution(
+    problem_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    problem = (await db.execute(select(CodingProblem).where(CodingProblem.id == problem_id))).scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+    return {
+        "solution_code": problem.solution_code, "explanation": problem.solution_explanation,
+        "time_complexity": problem.time_complexity, "space_complexity": problem.space_complexity,
+    }

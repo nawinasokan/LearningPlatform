@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from typing import List
 import uuid
 import os
@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.config import settings
 from app.models.models import User, Resume, ResumeSkill, ResumeProject, ResumeFact
-from app.schemas.schemas import ResumeResponse, FactUpdateRequest
+from app.schemas.schemas import ResumeResponse, FactUpdateRequest, ResumeUpdateRequest
 from app.services.resume_parser import parse_resume
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
@@ -21,16 +21,25 @@ async def upload_resume(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not file.filename.endswith((".pdf", ".docx")):
+    original_name = os.path.basename((file.filename or "").replace("\\", "/"))
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext not in (".pdf", ".docx"):
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported")
 
-    # Save file
+    data = await file.read(settings.MAX_UPLOAD_SIZE + 1)
+    if len(data) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds the {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} MB limit")
+    magic_ok = data.startswith(b"%PDF") if ext == ".pdf" else data.startswith(b"PK")
+    if not magic_ok:
+        raise HTTPException(status_code=400, detail="File content does not match its extension")
+
+    # Store under a server-generated name; the client filename is only kept as a label.
     upload_dir = settings.UPLOAD_DIR
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, f"{current_user.id}_{file.filename}")
-
+    file_path = os.path.join(upload_dir, f"{current_user.id}_{uuid.uuid4().hex}{ext}")
     with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+        f.write(data)
+    file.filename = original_name[:255]
 
     # Parse resume
     parsed = parse_resume(file_path, file.filename)
@@ -146,6 +155,47 @@ async def get_resume(
         raise HTTPException(status_code=404, detail="Resume not found")
 
     return await _build_resume_response(resume_id, db)
+
+
+@router.patch("/{resume_id}", response_model=ResumeResponse)
+async def update_resume(
+    resume_id: uuid.UUID,
+    payload: ResumeUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edit parsed data. Lists, when provided, replace the stored skills/projects;
+    `new_facts` appends manually documented facts (unverified until confirmed)."""
+    result = await db.execute(select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    if payload.skills is not None:
+        await db.execute(delete(ResumeSkill).where(ResumeSkill.resume_id == resume_id))
+        for item in payload.skills:
+            db.add(ResumeSkill(resume_id=resume_id, **item.model_dump()))
+    if payload.projects is not None:
+        await db.execute(delete(ResumeProject).where(ResumeProject.resume_id == resume_id))
+        for item in payload.projects:
+            db.add(ResumeProject(resume_id=resume_id, **item.model_dump()))
+    for fact in payload.new_facts or []:
+        db.add(ResumeFact(resume_id=resume_id, category=fact.category, fact_text=fact.fact_text, is_verified=False))
+    await db.commit()
+    return await _build_resume_response(resume_id, db)
+
+
+@router.delete("/{resume_id}/facts/{fact_id}", status_code=204)
+async def delete_resume_fact(
+    resume_id: uuid.UUID,
+    fact_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    owned = await db.execute(select(Resume.id).where(Resume.id == resume_id, Resume.user_id == current_user.id))
+    if not owned.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Resume not found")
+    await db.execute(delete(ResumeFact).where(ResumeFact.id == fact_id, ResumeFact.resume_id == resume_id))
+    await db.commit()
 
 
 @router.get("/{resume_id}/facts")

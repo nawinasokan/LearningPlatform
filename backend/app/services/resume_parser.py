@@ -46,22 +46,15 @@ SKILL_CATEGORIES = {
     "oauth": ("Backend", "backend-engineering"),
 }
 
-PROJECT_PATTERNS = [
-    r"(?i)(audio annotation|transcription)",
-    r"(?i)(f1|enterprise|qc audit|reporting platform)",
-    r"(?i)(smart ai assist|ai assist)",
-]
-
-FACT_PATTERNS = [
-    (r"(\d+M\+?\s+rows?)", "achievement"),
-    (r"(\d+%\s+(?:improvement|reduction|increase|uptime))", "achievement"),
-    (r"(\d+\.\d+x\s+(?:improvement|throughput|performance))", "achievement"),
-    (r"(99%\s+uptime)", "achievement"),
-    (r"(AWS|EC2|S3)\s+deploy", "experience"),
-    (r"(?i)(bachelor|b\.e\.|engineering)", "education"),
-    (r"(?i)(cgpa|gpa)\s*:\s*[\d.]+", "education"),
-    (r"(?i)(best project award)", "award"),
-]
+# Project headings are detected from the uploaded text only (nothing is injected).
+PROJECT_TITLE_RE = re.compile(
+    r"^\s*[-•*]?\s*([A-Z][A-Za-z0-9&/ ,'\-]{3,80}(?:Platform|Application|App|System|Assist|Portal|Tool|Engine|Dashboard))\s*(?:[:\-–—|(].*)?$"
+)
+# A line is a "fact" when it states a measurable result or a credential.
+METRIC_RE = re.compile(r"(\d+(?:\.\d+)?\s*(?:%|x\b|[KMB]\+|\+|ms\b|seconds?\b|rows?\b|users?\b|records?\b))", re.I)
+EDUCATION_RE = re.compile(r"\b(bachelor|master|b\.?e\.?|b\.?tech|m\.?tech|b\.?sc|m\.?sc|mba|cgpa|gpa|university|college)\b", re.I)
+AWARD_RE = re.compile(r"\b(award|winner|rank(?:ed)?|scholarship|certified|certification)\b", re.I)
+EXPERIENCE_RE = re.compile(r"\b(developer|engineer|intern|analyst|consultant|architect|lead)\b.{0,80}\b(?:19|20)\d{2}\b", re.I)
 
 
 def parse_resume(file_path: str, filename: str) -> Dict[str, Any]:
@@ -115,103 +108,73 @@ def _extract_docx(file_path: str) -> str:
         return f"[DOCX extraction error: {e}]"
 
 
-def _extract_skills(text: str) -> List[Dict]:
-    """Match known technology keywords in the resume text."""
-    text_lower = text.lower()
-    found = {}
+def _lines(text: str) -> List[str]:
+    return [re.sub(r"\s+", " ", ln).strip(" \t•*-–") for ln in text.splitlines() if ln.strip()]
 
+
+def _skill_hits(text: str) -> Dict[str, Dict]:
+    """Whole-word keyword matches (so 's3' never matches inside 'class3')."""
+    found: Dict[str, Dict] = {}
     for keyword, (category, subject_slug) in SKILL_CATEGORIES.items():
-        if keyword in text_lower:
-            if keyword not in found:
-                found[keyword] = {
-                    "name": keyword.title(),
-                    "category": category,
-                    "proficiency": "Experienced",
-                    "subject_slug": subject_slug,
-                }
+        if re.search(r"(?<![A-Za-z0-9])" + re.escape(keyword) + r"(?![A-Za-z0-9])", text, re.I):
+            found[keyword] = {
+                "name": keyword.upper() if len(keyword) <= 4 else keyword.title(),
+                "category": category,
+                "proficiency": None,  # a resume cannot prove proficiency; the learner edits this
+                "subject_slug": subject_slug,
+            }
+    return found
 
-    return list(found.values())
+
+def _extract_skills(text: str) -> List[Dict]:
+    """Match known technology keywords that actually appear in the resume text."""
+    return list(_skill_hits(text).values())
 
 
 def _extract_projects(text: str) -> List[Dict]:
-    """Extract known projects from the resume."""
-    projects = []
-    nawin_projects = [
-        {
-            "title": "Audio Annotation & Transcription Platform",
-            "description": "Multi-stage audio annotation and transcription platform with AI-powered transcription, translation, task workflows, and role-based access control.",
-            "technologies": {"list": ["Django", "Python", "PostgreSQL", "Gemini API"]},
-            "achievements": {"list": [
-                "Reduced manual annotation effort by 50%",
-                "AI-powered transcription and translation",
-                "RBAC with multi-stage workflows",
-            ]},
-            "subject_slug": "django",
-        },
-        {
-            "title": "F1 Enterprise QC Audit & Reporting Platform",
-            "description": "Multi-module audit and reporting platform handling 150M+ rows with Excel ingestion, dynamic field mapping, 8+ report engines, and real-time dashboards.",
-            "technologies": {"list": ["Django", "PostgreSQL", "Celery", "Redis"]},
-            "achievements": {"list": [
-                "Handles 150M+ rows",
-                "Improved batch upload throughput by 5.2x",
-                "Improved query performance by up to 78x",
-                "PostgreSQL partitioning and indexing",
-                "8+ report engines",
-            ]},
-            "subject_slug": "django",
-        },
-        {
-            "title": "Smart AI Assist",
-            "description": "Single-page AI web application for email drafting, blog writing, and text summarization with async API calls, response caching, and under 2-second latency.",
-            "technologies": {"list": ["Python", "Flask", "Gemini API", "JavaScript"]},
-            "achievements": {"list": [
-                "Under 2-second response latency",
-                "25% token usage reduction",
-                "Reusable prompt-engineering layer",
-                "Eliminated prompt duplication",
-            ]},
-            "subject_slug": "flask",
-        },
-    ]
-
-    for pattern, project in zip(PROJECT_PATTERNS, nawin_projects):
-        if re.search(pattern, text):
-            projects.append(project)
-
-    # If nothing matched, add all projects (since this is Nawin's platform)
-    if not projects:
-        projects = nawin_projects
-
+    """Detect project headings in the text and collect the bullet lines under each."""
+    lines = _lines(text)
+    projects: List[Dict] = []
+    for i, line in enumerate(lines):
+        m = PROJECT_TITLE_RE.match(line)
+        if not m:
+            continue
+        block: List[str] = []
+        for nxt in lines[i + 1:i + 9]:
+            if PROJECT_TITLE_RE.match(nxt):
+                break
+            block.append(nxt)
+        block_text = " ".join(block)
+        hits = _skill_hits(block_text)
+        slug = next((h["subject_slug"] for h in hits.values() if h["subject_slug"]), None)
+        projects.append({
+            "title": m.group(1).strip(),
+            "description": " ".join(block[:3]) or None,
+            "technologies": {"list": [h["name"] for h in hits.values()]},
+            "achievements": {"list": [b for b in block if METRIC_RE.search(b)]},
+            "subject_slug": slug,
+        })
     return projects
 
 
 def _extract_facts(text: str) -> List[Dict]:
-    """Extract measurable achievements and facts."""
-    facts = []
-    # Always include known facts from Nawin's resume
-    nawin_facts = [
-        {"category": "achievement", "text": "Built backend systems handling 150M+ rows using Django, PostgreSQL, Celery and Redis"},
-        {"category": "achievement", "text": "Improved database query efficiency by 15% across PostgreSQL and MySQL"},
-        {"category": "achievement", "text": "Improved batch upload throughput by 5.2x in F1 QC platform"},
-        {"category": "achievement", "text": "Improved query performance by up to 78x using PostgreSQL partitioning and indexing"},
-        {"category": "achievement", "text": "Reduced manual annotation effort by 50% in Audio Annotation platform"},
-        {"category": "achievement", "text": "Achieved under 2-second response latency in Smart AI Assist"},
-        {"category": "achievement", "text": "Reduced token usage by 25% with reusable prompt-engineering layer"},
-        {"category": "experience", "text": "Deployed and maintained applications on AWS EC2 and S3 with 99% uptime"},
-        {"category": "experience", "text": "Executive – Software Developer at Mahima Technology Pvt Ltd (August 2024 – Present)"},
-        {"category": "education", "text": "B.E. in Electronics and Communication Engineering, Sona College of Technology, Salem — CGPA: 8.46/10"},
-        {"category": "award", "text": "Best Project Award (2024)"},
-    ]
-
-    # Also try pattern-based extraction from uploaded text
-    for pattern, category in FACT_PATTERNS:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            if isinstance(match, tuple):
-                match = match[0]
-            fact_text = match.strip()
-            if fact_text and not any(f["text"] == fact_text for f in nawin_facts):
-                facts.append({"category": category, "text": fact_text})
-
-    return nawin_facts + facts
+    """Extract measurable achievements and credentials stated in the resume text."""
+    facts: List[Dict] = []
+    seen = set()
+    for line in _lines(text):
+        if len(line) < 12 or len(line) > 400:
+            continue
+        if EDUCATION_RE.search(line):
+            category = "education"
+        elif AWARD_RE.search(line):
+            category = "award"
+        elif METRIC_RE.search(line):
+            category = "achievement"
+        elif EXPERIENCE_RE.search(line):
+            category = "experience"
+        else:
+            continue
+        if line.lower() not in seen:
+            seen.add(line.lower())
+            facts.append({"category": category, "text": line})
+    return facts

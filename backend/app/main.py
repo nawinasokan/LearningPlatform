@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import structlog
 
 from app.core.config import settings
-from app.api.v1 import auth, learning, analytics, resumes, coding, sql_lab, diagrams, bookmarks, revision, projects
+from app.api.v1 import auth, learning, analytics, resumes, coding, sql_lab, diagrams, bookmarks, revision, projects, discover
 
 logger = structlog.get_logger()
 
@@ -49,6 +49,7 @@ app.include_router(diagrams.router, prefix=API_PREFIX)
 app.include_router(bookmarks.router, prefix=API_PREFIX)
 app.include_router(revision.router, prefix=API_PREFIX)
 app.include_router(projects.router, prefix=API_PREFIX)
+app.include_router(discover.router, prefix=API_PREFIX)
 
 
 @app.get("/")

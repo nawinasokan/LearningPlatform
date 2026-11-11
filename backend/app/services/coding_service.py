@@ -3,6 +3,7 @@ Sandboxed Python code execution service.
 Runs user code in an isolated subprocess with strict timeouts
 and resource limits. Never executes inside the FastAPI process.
 """
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,10 +22,31 @@ MAX_MEMORY_BYTES = 256 * 1024 * 1024
 
 def _limit_resources() -> None:
     """Apply Linux process limits before starting untrusted exercise code."""
+    os.setsid()
     resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT_SECONDS, TIMEOUT_SECONDS + 1))
     resource.setrlimit(resource.RLIMIT_AS, (MAX_MEMORY_BYTES, MAX_MEMORY_BYTES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
     resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
+    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
+# Runs inside the child interpreter. Best-effort guards (not a security boundary
+# on their own - the boundary is the scrubbed environment, throwaway cwd and
+# resource limits): block network sockets and process spawning.
+_WRAPPER = r"""
+import sys, io, runpy, socket, os, builtins
+sys.stdin = io.StringIO(open('input.txt').read())
+def _blocked(*a, **k):
+    raise PermissionError('Network and process access are disabled in the sandbox')
+socket.socket = _blocked
+socket.create_connection = _blocked
+socket.getaddrinfo = _blocked
+for _n in ('system', 'popen', 'fork', 'forkpty', 'execv', 'execve', 'execvp', 'spawnl', 'spawnv', 'kill'):
+    if hasattr(os, _n):
+        setattr(os, _n, _blocked)
+runpy.run_path('solution.py', run_name='__main__')
+"""
 
 
 def run_code_against_tests(
@@ -64,39 +86,26 @@ def _run_single_test(
     input_data = test_case.get("input_data", "")
     expected_output = str(test_case.get("expected_output", "")).strip()
 
-    # Provide test input before evaluating the learner's script. Starter code
-    # commonly reads stdin at module level after defining its function.
-    runner_code = f"""
-import sys
-import io
-sys.stdin = io.StringIO({repr(input_data)})
-
-# User code
-{code}
-"""
-
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".py",
-        delete=False,
-        prefix="interview_academy_",
-    ) as tmp:
-        tmp.write(runner_code)
-        tmp_path = tmp.name
+    # Each run gets an empty throwaway directory as its cwd and a minimal
+    # environment, so learner code cannot see the API's secrets or files.
+    workdir = tempfile.mkdtemp(prefix="interview_academy_")
+    with open(os.path.join(workdir, "solution.py"), "w") as fh:
+        fh.write(code)
+    with open(os.path.join(workdir, "input.txt"), "w") as fh:
+        fh.write(str(input_data))
+    tmp_path = workdir
 
     try:
         start = time.perf_counter()
         proc = subprocess.run(
-            [sys.executable, tmp_path],
+            [sys.executable, "-I", "-c", _WRAPPER],
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,
+            cwd=workdir,
+            stdin=subprocess.DEVNULL,
             preexec_fn=_limit_resources,
-            # Resource limits via env
-            env={
-                **os.environ,
-                "PYTHONDONTWRITEBYTECODE": "1",
-            },
+            env={"PATH": "/usr/local/bin:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0"},
         )
         elapsed = (time.perf_counter() - start) * 1000
 
@@ -139,7 +148,4 @@ sys.stdin = io.StringIO({repr(input_data)})
             "runtime_ms": None,
         }
     finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+        shutil.rmtree(workdir, ignore_errors=True)

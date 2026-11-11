@@ -206,10 +206,14 @@ async def get_questions(
     page_size: int = Query(20, ge=1, le=100),
     subject_slug: Optional[str] = None,
     difficulty: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     q = select(Question).join(Topic).join(Subject).where(Question.is_active == True)
+    if search:
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        q = q.where(Question.question_text.ilike(f"%{escaped}%", escape="\\"))
     if subject_slug:
         q = q.where(Subject.slug == subject_slug)
     if difficulty:
