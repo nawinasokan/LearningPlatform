@@ -812,3 +812,6 @@ function Video({ src }) {
   }, []);
   return <time>{now.toLocaleTimeString()}</time>;
 }""", lang="jsx"))
+
+# Map curated topics to the subject slug consumed by the seed script.
+TOPICS = {"js-react": JS_REACT}

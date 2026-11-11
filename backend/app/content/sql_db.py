@@ -1043,3 +1043,8 @@ Pitfalls: with the default RANGE frame, ties in the ORDER BY share the same cumu
 Follow-up: 'Moving average over the last 7 days?' AVG(x) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), assuming one row per day."""),
     ],
 ))
+
+# The seed and content validator consume a subject-slug -> topics mapping.
+# Keep only subjects with curated topics here so empty collections do not
+# deactivate existing content for subjects that are still being authored.
+TOPICS = {"sql-postgresql": SQL}
